@@ -18,6 +18,7 @@
     ogham:      { tab: '오검',     label: '오검 문자',       font: 'Noto Sans Ogham', dir: '↑ 아래부터 · 화면에선 →', approx: true }
   };
   var TABS = KEYS.concat(['all']);
+  var NOMEN = '탄생명 (nomen)'; // 내 본래 이름을 옮긴 카르투슈 → 파라오의 탄생명에 해당
   var $ = function (id) { return document.getElementById(id); };
   var state = { res: null, tab: 'hiero' };
   var fontOK = {};
@@ -62,7 +63,7 @@
   function cartoucheSVG(res) {
     var gl = glyphList(res.hiero), g = geometry(gl.length);
     var s = '<svg xmlns="http://www.w3.org/2000/svg" width="' + g.w + '" height="' + g.h + '" viewBox="0 0 ' + g.w + ' ' + g.h +
-      '" role="img" aria-label="' + esc(res.roman) + '">';
+      '" role="img" aria-label="' + esc('탄생명 카르투슈: ' + res.roman) + '">';
     s += '<rect x="' + g.x + '" y="' + g.y + '" width="' + g.cw + '" height="' + g.ch + '" rx="' + g.r + '" fill="' + COL.card +
       '" stroke="' + COL.goldDark + '" stroke-width="' + g.sw + '"/>';
     s += '<line x1="' + g.bar.x1 + '" y1="' + g.bar.y1 + '" x2="' + g.bar.x2 + '" y2="' + g.bar.y2 + '" stroke="' + COL.goldDark + '" stroke-width="3" stroke-linecap="round"/>';
@@ -108,7 +109,8 @@
       var aria = k === 'roman' ? '' : ' aria-label="' + esc(S[k].label + ', 읽기: ' + res.roman) + '"';
       val = '<div class="value f-' + k + '"' + aria + (S[k].rtl ? ' dir="rtl"' : '') + '>' + inner + '</div>';
     }
-    var cart = (big && k === 'hiero' && ready) ? '<div class="cartouche">' + cartoucheSVG(res) + '</div>' : '';
+    var cart = (big && k === 'hiero' && ready) ? '<figure class="cartouche">' + cartoucheSVG(res) +
+      '<figcaption class="nomen">' + NOMEN + '</figcaption></figure>' : '';
     return '<article class="card" data-script="' + k + '"><div class="label"><span>' + S[k].label + '</span><span class="dir">' + dir +
       '</span></div>' + val + cart + (S[k].approx ? '<div class="approx">소리 근사</div>' : '') + '</article>';
   }
@@ -256,9 +258,11 @@
     text(ctx, S[k].label, W / 2, 140, '600 32px "Noto Serif KR"', COL.goldDark, 'center', 'top');
     var o = { size: 120, cune: 96, cartW: 260, oghamMax: 600 };
     var hh = heroMeasure(k, res, o, maxW);
-    var block = hh + 64 + 56 + 16 + 36, top = (H - block) / 2;
+    var cap = k === 'hiero' ? 20 + 24 : 0; // 카르투슈 아래 '탄생명 (nomen)'
+    var block = hh + cap + 64 + 56 + 16 + 36, top = (H - block) / 2;
     heroDraw(ctx, k, res, o, W / 2, top, hh, maxW);
-    var y = top + hh + 64;
+    if (cap) text(ctx, NOMEN, W / 2, top + hh + 20, '400 24px "Noto Sans KR"', COL.muted, 'center', 'top');
+    var y = top + hh + cap + 64;
     text(ctx, res.korean, W / 2, y, '500 56px "Noto Sans KR"', COL.text, 'center', 'top');
     text(ctx, res.roman, W / 2, y + 56 + 16, '400 36px "Noto Serif"', COL.muted, 'center', 'top');
     rosetta(ctx, W, H, 26, 110, true);
@@ -269,12 +273,15 @@
     var ctx = cv.getContext('2d'); frame(ctx, W, H);
     var maxW = W - 192, areaTop = 250, areaH = 1330;
     var o = { size: 140, cune: 112, cartW: 300, oghamMax: 800 };
-    var fixed = 36 + 80 + 80 + 64 + 48 + 40 + 48 + 28;
+    var cap = k === 'hiero' ? 24 + 28 : 0;
+    var fixed = 36 + 80 + cap + 80 + 64 + 48 + 40 + 48 + 28;
     var hh = Math.min(heroMeasure(k, res, o, maxW), areaH - fixed);
     o.oghamMax = Math.min(800, areaH - fixed);
     var top = areaTop + (areaH - (fixed + hh)) / 2, y = top;
     text(ctx, S[k].label, W / 2, y, '600 36px "Noto Serif KR"', COL.goldDark, 'center', 'top'); y += 36 + 80;
-    heroDraw(ctx, k, res, o, W / 2, y, hh, maxW); y += hh + 80;
+    heroDraw(ctx, k, res, o, W / 2, y, hh, maxW); y += hh;
+    if (cap) { text(ctx, NOMEN, W / 2, y + 24, '400 28px "Noto Sans KR"', COL.muted, 'center', 'top'); y += cap; }
+    y += 80;
     text(ctx, res.korean, W / 2, y, '500 64px "Noto Sans KR"', COL.text, 'center', 'top'); y += 64 + 48;
     text(ctx, res.roman, W / 2, y, '400 40px "Noto Serif"', COL.muted, 'center', 'top'); y += 40 + 48;
     text(ctx, '로제타석처럼, 한 이름을 세 문자로.', W / 2, y, '400 28px "Noto Sans KR"', COL.muted, 'center', 'top');
@@ -309,7 +316,8 @@
     var W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     var ctx = cv.getContext('2d'); ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, W, H);
     var g = geometry(glyphList(res.hiero).length), sc = Math.min(2.4, (W - 160) / g.w, 800 / g.h);
-    drawCartouche(ctx, res.hiero, W / 2, 80 + 400, 120 * sc, 36 * sc, W - 160, 800);
+    var ch = drawCartouche(ctx, res.hiero, W / 2, 80 + 400, 120 * sc, 36 * sc, W - 160, 800);
+    text(ctx, NOMEN, W / 2, 480 + ch / 2 + 28, '400 24px "Noto Sans KR"', COL.muted, 'center', 'top');
     text(ctx, res.korean, W / 2, 1000, '500 40px "Noto Sans KR"', COL.text);
     text(ctx, res.roman, W / 2, 1066, '400 32px "Noto Serif"', COL.text);
     text(ctx, res.greek, W / 2, 1122, '400 32px "Noto Serif"', COL.text);

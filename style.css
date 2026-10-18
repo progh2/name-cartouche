@@ -79,6 +79,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--kr);font-weight:40
 .syl .k{font-size:16px;line-height:1.2}
 
 .notice{font-size:13px;color:var(--muted);margin:20px 0 24px}
+.info{margin-top:20px;background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:12px 14px;color:var(--muted);font-size:12px;line-height:1.6}
+.info-title{font:500 13px var(--kr);color:var(--text);margin:0 0 4px}
+.info p{margin:0 0 4px}.info p:last-child{margin:0}
+.info b{font-weight:500;color:var(--text)}
+figure.cartouche{margin:0;flex-direction:column;align-items:center}
+.nomen{margin-top:8px;font-size:12px;color:var(--muted)}
 .foot{border-top:1px solid var(--sand);padding:24px;text-align:center;font-size:12px;color:var(--muted)}
 
 .toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);background:var(--text);color:var(--card);
