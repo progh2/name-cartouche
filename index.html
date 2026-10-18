@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>이름 카르투슈 · 한글 이름을 세 문자로</title>
+<meta name="description" content="한글 이름을 로마자 · 그리스어 · 이집트 상형문자 카르투슈로 음역합니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Egyptian+Hieroglyphs&family=Noto+Sans+Runic&family=Noto+Sans+Phoenician&family=Noto+Sans+Ugaritic&family=Noto+Sans+Ogham&family=Noto+Sans+KR:wght@400;500&family=Noto+Serif+KR:wght@600&family=Noto+Serif:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect x=%229%22 y=%222%22 width=%2214%22 height=%2224%22 rx=%227%22 fill=%22%23FBF5E6%22 stroke=%22%239C7A1A%22 stroke-width=%222%22/%3E%3Cpath d=%22M6 29h20%22 stroke=%22%239C7A1A%22 stroke-width=%222%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="wrap">
+  <header class="head">
+    <h1>이름 카르투슈</h1>
+    <p class="sub">한글 이름을 로마자 · 그리스어 · 이집트 상형문자로</p>
+  </header>
+
+  <form id="form" class="form" autocomplete="off">
+    <label for="name" class="sr-only">한글 이름</label>
+    <input id="name" name="name" type="text" inputmode="text" placeholder="예: 함기훈" maxlength="20" required>
+    <button type="submit" class="btn-convert">변환</button>
+    <p id="warn" class="warn" hidden></p>
+  </form>
+
+  <nav class="tabs-wrap" aria-label="문자 선택">
+    <div id="tabs" class="tabs" role="tablist"></div>
+  </nav>
+
+  <section id="cards" class="cards" aria-live="polite"></section>
+
+  <div class="actions">
+    <button type="button" id="btn-png" class="btn-fill" disabled>PNG 저장</button>
+    <button type="button" id="btn-copy" class="btn-line" disabled>복사</button>
+  </div>
+  <div class="actions">
+    <button type="button" id="btn-feed" class="btn-line" disabled>인스타 피드</button>
+    <button type="button" id="btn-story" class="btn-line" disabled>인스타 스토리</button>
+  </div>
+
+  <section class="table-wrap" id="table-wrap" hidden>
+    <table class="syl">
+      <thead><tr><th>한글</th><th>로마자</th><th id="th-script">상형</th><th>비고</th></tr></thead>
+      <tbody id="syl-body"></tbody>
+    </table>
+  </section>
+
+  <p class="notice">※ 번역이 아니라 <strong>소리 옮김(음역)</strong>이에요. 이름의 뜻이 아니라 발음을 각 문자로 옮겼고, 고대 이집트어·현대 그리스어의 정식 표기와는 다를 수 있어요.</p>
+</main>
+
+<footer class="foot">로제타석처럼, 한 이름을 세 문자로.</footer>
+<div id="sheet" class="sheet" hidden>
+  <div class="dim" data-close></div>
+  <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <h2 id="sheet-title" class="sr-only">카드 미리보기</h2>
+    <img id="sheet-img" alt="">
+    <div class="actions">
+      <button type="button" id="sheet-save" class="btn-fill">저장</button>
+      <button type="button" class="btn-line" data-close>닫기</button>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="convert.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
