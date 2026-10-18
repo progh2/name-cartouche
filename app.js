@@ -18,9 +18,14 @@
     ogham:      { tab: '오검',     label: '오검 문자',       font: 'Noto Sans Ogham', dir: '↑ 아래부터 · 화면에선 →', approx: true }
   };
   var TABS = KEYS.concat(['all']);
-  var NOMEN = '탄생명 (nomen)'; // 내 본래 이름을 옮긴 카르투슈 → 파라오의 탄생명에 해당
+  var LABELS = ['즉위명 · 칭호', '탄생명 · 내 이름'];
+  var E = window.Engrave;
+  var MAT_KEY = 'name-cartouche:hieroMat', INFO_KEY = 'name-cartouche:infoAutoOpened';
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
   var $ = function (id) { return document.getElementById(id); };
-  var state = { res: null, tab: 'hiero' };
+  var state = { res: null, tab: 'hiero', title: null, hieroMat: lsGet(MAT_KEY) === 'papyrus' ? 'papyrus' : 'limestone',
+    stage: 'preview', stage3d: null, stageBusy: null, userConverted: false };
   var fontOK = {};
 
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
@@ -42,37 +47,7 @@
       }) : []));
   }
 
-  /* ---------- 카르투슈 기하 (1차 지침: 폭 120, 슬롯 48, 위아래 24, 6자 초과 가로) ---------- */
-  function geometry(n, o) {
-    o = o || {};
-    var k = (o.W || 120) / 120, W = 120 * k, slot = 48 * k, pad = 24 * k, SW = 3 * k, GAP = 4 * k, BAR = W + 16 * k;
-    var vertical = n <= 6, L = n * slot + pad * 2;
-    var cw = vertical ? W : L, ch = vertical ? L : W;
-    var w = vertical ? Math.max(BAR, cw + SW) + SW : cw + SW + GAP + SW * 1.5;
-    var h = vertical ? ch + SW + GAP + SW * 1.5 : Math.max(BAR, ch + SW) + SW;
-    var x = vertical ? (w - cw) / 2 : SW / 2 + 1, y = vertical ? SW / 2 + 1 : (h - ch) / 2;
-    var glyphs = [];
-    for (var i = 0; i < n; i++) glyphs.push(vertical ? { x: x + cw / 2, y: y + pad + i * slot + slot / 2 } : { x: x + pad + i * slot + slot / 2, y: y + ch / 2 });
-    var bar = vertical
-      ? { x1: (w - BAR) / 2, y1: y + ch + SW / 2 + GAP + SW / 2, x2: (w + BAR) / 2, y2: y + ch + SW / 2 + GAP + SW / 2 }
-      : { x1: x + cw + SW / 2 + GAP + SW / 2, y1: (h - BAR) / 2, x2: x + cw + SW / 2 + GAP + SW / 2, y2: (h + BAR) / 2 };
-    return { vertical: vertical, w: w, h: h, x: x, y: y, cw: cw, ch: ch, r: W / 2, sw: SW, glyph: (o.glyph || 36), glyphs: glyphs, bar: bar };
-  }
   function glyphList(s) { return Array.from(s).filter(function (c) { return c.trim(); }); }
-
-  function cartoucheSVG(res) {
-    var gl = glyphList(res.hiero), g = geometry(gl.length);
-    var s = '<svg xmlns="http://www.w3.org/2000/svg" width="' + g.w + '" height="' + g.h + '" viewBox="0 0 ' + g.w + ' ' + g.h +
-      '" role="img" aria-label="' + esc('탄생명 카르투슈: ' + res.roman) + '">';
-    s += '<rect x="' + g.x + '" y="' + g.y + '" width="' + g.cw + '" height="' + g.ch + '" rx="' + g.r + '" fill="' + COL.card +
-      '" stroke="' + COL.goldDark + '" stroke-width="' + g.sw + '"/>';
-    s += '<line x1="' + g.bar.x1 + '" y1="' + g.bar.y1 + '" x2="' + g.bar.x2 + '" y2="' + g.bar.y2 + '" stroke="' + COL.goldDark + '" stroke-width="3" stroke-linecap="round"/>';
-    gl.forEach(function (c, i) {
-      s += '<text x="' + g.glyphs[i].x + '" y="' + g.glyphs[i].y + '" font-family="Noto Sans Egyptian Hieroglyphs" font-size="36" fill="' + COL.text +
-        '" text-anchor="middle" dominant-baseline="central" aria-hidden="true">' + c + '</text>';
-    });
-    return s + '</svg>';
-  }
 
   /* ---------- 화면 ---------- */
   function buildTabs() {
@@ -95,13 +70,14 @@
     if (left < wrap.scrollLeft) wrap.scrollLeft = left - 8;
     else if (right > wrap.scrollLeft + wrap.clientWidth - 24) wrap.scrollLeft = right - wrap.clientWidth + 32;
     render();
+    updateStage(true); // 탭 전환: 재료 크로스페이드 + 다시 새김
   }
 
   function cardHTML(k, res, big) {
     var has = res && res.syllables.length, v = has ? res[k] : '';
     var ready = has && (k === 'roman' || fontOK[S[k].font]);
     var dir = S[k].dir;
-    if (k === 'hiero' && has) dir = glyphList(res.hiero).length > 6 ? '→ 왼쪽부터' : '↓ 위부터';
+    if (k === 'hiero') dir = '↓ 위부터 (무대)';
     var val;
     if (!ready) val = '<div class="value empty">—</div>';
     else {
@@ -109,8 +85,7 @@
       var aria = k === 'roman' ? '' : ' aria-label="' + esc(S[k].label + ', 읽기: ' + res.roman) + '"';
       val = '<div class="value f-' + k + '"' + aria + (S[k].rtl ? ' dir="rtl"' : '') + '>' + inner + '</div>';
     }
-    var cart = (big && k === 'hiero' && ready) ? '<figure class="cartouche">' + cartoucheSVG(res) +
-      '<figcaption class="nomen">' + NOMEN + '</figcaption></figure>' : '';
+    var cart = '';
     return '<article class="card" data-script="' + k + '"><div class="label"><span>' + S[k].label + '</span><span class="dir">' + dir +
       '</span></div>' + val + cart + (S[k].approx ? '<div class="approx">소리 근사</div>' : '') + '</article>';
   }
@@ -139,6 +114,11 @@
         if (oks.some(Boolean) && state.res === res) render();
       });
     }
+    var hieroTab = state.tab === 'hiero' || state.tab === 'all';
+    $('hiero-extra').hidden = !(hieroTab && has);
+    $('info').hidden = state.tab !== 'hiero';
+    if (state.title) { $('title-ko').textContent = state.title.ko; $('title-mean').textContent = '‘' + state.title.meaning + '’ · ' + state.title.roman; }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-mat]'), function (b) { b.setAttribute('aria-checked', b.dataset.mat === state.hieroMat); });
     var w = $('warn');
     if (res && !has) { w.hidden = false; w.textContent = '한글 음절로 된 이름을 입력해 주세요.'; }
     else if (has && res.ignored.length) { w.hidden = false; w.textContent = '한글이 아닌 글자는 빼고 옮겼어요: ' + res.ignored.join(' '); }
@@ -149,6 +129,7 @@
   function convertNow(name, opts) {
     opts = opts || { save: true, url: true };
     state.res = C.convert(name);
+    if (!state.title) state.title = C.randomTitle();
     if (opts.save && state.res.syllables.length) saveName(name.trim());
     if (opts.url) try {
       var u = new URL(location.href);
@@ -156,6 +137,11 @@
       history.replaceState(null, '', u);
     } catch (e) {}
     render();
+    if (opts.user && state.res.syllables.length) {
+      state.userConverted = true;
+      if (!lsGet(INFO_KEY)) { $('info').open = true; lsSet(INFO_KEY, '1'); } // 첫 변환 때 한 번만 자동 펼침
+      activateStage().then(function () { updateStage(true); });
+    } else if (state.stage !== 'preview') updateStage(true);
   }
 
   var toastTimer;
@@ -167,7 +153,8 @@
     var res = state.res; if (!res) return;
     var text = state.tab === 'all'
       ? res.korean + '\n' + KEYS.map(function (k) { return S[k].label + ': ' + res[k]; }).join('\n')
-      : res.korean + '\n' + res.roman + (state.tab === 'roman' ? '' : '\n' + res[state.tab]);
+      : res.korean + '\n' + res.roman + (state.tab === 'roman' ? '' : '\n' + res[state.tab]) +
+        (state.tab === 'hiero' && state.title ? '\n즉위명 ' + state.title.ko + ' ' + state.title.hiero : '');
     var done = function () { toast('복사했어요'); };
     function fallback() {
       var ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', '');
@@ -178,151 +165,185 @@
     if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
   }
 
-  /* ---------- 캔버스 공통 ---------- */
-  function rr(ctx, x, y, w, h, r) {
-    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  /* ---------- 무대: 미리보기 → (첫 변환) 3D 또는 2D ---------- */
+  var qs = (function () { try { return new URL(location.href).searchParams; } catch (e) { return new URLSearchParams(''); } })();
+  var reducedMQ = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+  function webglOK() {
+    try { var c = document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); } catch (e) { return false; }
   }
-  function fam(k) { return '"' + S[k].font + '"'; }
-  function fit(ctx, text, family, size, maxW, weight) {
-    var s = size;
-    do { ctx.font = (weight || 400) + ' ' + s + 'px ' + family; if (ctx.measureText(text).width <= maxW) break; s -= 2; } while (s > 12);
-    return s;
+  function stageKey() { return state.tab === 'all' ? 'hiero' : state.tab; }
+  function activateStage() {
+    if (state.stage !== 'preview') return Promise.resolve();
+    if (state.stageBusy) return state.stageBusy;
+    var want2d = qs.get('mode') === '2d' || reducedMQ.matches || !webglOK();
+    $('stage').classList.add('loading');
+    state.stageBusy = (want2d ? Promise.reject(new Error('2d')) : import('./stage3d.js').then(function (m) {
+      state.stage3d = m.createStage($('stage-3d'), { reduced: false }); state.stage = '3d';
+    })).catch(function () { state.stage = '2d'; }).then(function () {
+      $('stage').classList.remove('loading'); $('stage').dataset.mode = state.stage;
+      $('stage-preview').hidden = true; $('stage-hint').hidden = true;
+      $('stage-2d').hidden = state.stage !== '2d'; $('stage-3d').hidden = state.stage !== '3d';
+    });
+    return state.stageBusy;
   }
-  function drawCartouche(ctx, glyphStr, cx, cy, W, glyph, maxW, maxH) {
-    var gl = glyphList(glyphStr), g = geometry(gl.length, { W: W, glyph: glyph });
-    var sc = Math.min(1, maxW / g.w, maxH / g.h);
-    ctx.save(); ctx.translate(cx - g.w * sc / 2, cy - g.h * sc / 2); ctx.scale(sc, sc);
-    rr(ctx, g.x, g.y, g.cw, g.ch, g.r); ctx.fillStyle = COL.card; ctx.fill(); ctx.lineWidth = g.sw; ctx.strokeStyle = COL.goldDark; ctx.stroke();
-    ctx.beginPath(); ctx.lineCap = 'round'; ctx.lineWidth = g.sw; ctx.moveTo(g.bar.x1, g.bar.y1); ctx.lineTo(g.bar.x2, g.bar.y2); ctx.stroke();
-    ctx.fillStyle = COL.text; ctx.font = glyph + 'px ' + fam('hiero'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    gl.forEach(function (c, i) { ctx.fillText(c, g.glyphs[i].x, g.glyphs[i].y); });
-    ctx.restore();
-    return g.h * sc;
+  function stageFonts(key) {
+    var res = state.res, p = [loadFont(key === 'roman' ? 'greek' : key, res[key])];
+    if (key === 'hiero') p.push(loadFont('hiero', (state.title ? state.title.hiero : '') + E.TITLE_SIGN.prenomen + E.TITLE_SIGN.nomen));
+    if (document.fonts) p.push(document.fonts.load('500 22px "Noto Sans KR"', '즉위명'));
+    return Promise.all(p).catch(function () {});
   }
-  function hieroSize(glyphStr, W, glyph, maxW, maxH) {
-    var g = geometry(glyphList(glyphStr).length, { W: W, glyph: glyph }); return g.h * Math.min(1, maxW / g.w, maxH / g.h);
+  var stageSeq = 0;
+  function updateStage(animate) {
+    var res = state.res; if (!res || !res.syllables.length || state.stage === 'preview') return Promise.resolve();
+    var key = stageKey(), mat = E.matFor(key, state.hieroMat), seq = ++stageSeq;
+    var st = $('stage'); st.dataset.script = key; st.dataset.mat = mat;
+    var aria = (key === 'hiero' ? '즉위명 ' + state.title.ko + ', 탄생명 ' + res.korean + ' 카르투슈 두 개' : S[key].label + ' ' + res.roman) + '를 ' + E.MATS[mat].name + '에 새긴 모습';
+    st.setAttribute('aria-label', aria);
+    $('stage-labels').hidden = key !== 'hiero';
+    return stageFonts(key).then(function () {
+      if (seq !== stageSeq) return;
+      if (state.stage === '3d') return state.stage3d.show(key, res, state.title, mat, animate);
+      return E.loadTex(mat).then(function (tex) {
+        if (seq !== stageSeq) return;
+        var c = $('stage-2d'), dpr = Math.min(window.devicePixelRatio || 1, 2);
+        c.width = Math.round(st.clientWidth * dpr); c.height = Math.round(st.clientHeight * dpr);
+        lastSize = st.clientWidth + 'x' + st.clientHeight;
+        E.drawStage2D(c, key, res, state.title, mat, tex);
+      });
+    }).then(function () { if (seq === stageSeq) st.dataset.ready = '1'; });
   }
-  // 오검: 줄기선 + 문자. vertical이면 아래→위
-  function drawOgham(ctx, text, cx, cy, size, maxLen, vertical, lineW) {
-    var s = fit(ctx, text, fam('ogham'), size, maxLen);
-    ctx.save(); ctx.translate(cx, cy); if (vertical) ctx.rotate(-Math.PI / 2);
-    ctx.font = s + 'px ' + fam('ogham'); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    var m = ctx.measureText('ᚐ'), base = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;
-    var w = ctx.measureText(text).width;
-    ctx.strokeStyle = COL.goldDark; ctx.lineWidth = lineW || 1.5; ctx.beginPath(); ctx.moveTo(-w / 2 - s * 0.15, 0); ctx.lineTo(w / 2 + s * 0.15, 0); ctx.stroke();
-    ctx.fillStyle = COL.text; ctx.fillText(text, 0, base);
-    ctx.restore();
-    return vertical ? w : s;
-  }
-  function drawScriptLine(ctx, k, text, x, y, size, maxW, align) { // y = 가운데
-    var family = fam(k), s = fit(ctx, text, family, size, maxW);
-    ctx.save(); ctx.fillStyle = COL.text; ctx.textBaseline = 'middle'; ctx.textAlign = align || 'center';
-    ctx.direction = S[k].rtl ? 'rtl' : 'ltr';
-    if (k === 'phoenician' && align === 'left') { ctx.textAlign = 'right'; x = x + maxW; }
-    if (k === 'runic' || k === 'ugaritic') { var sp = k === 'ugaritic' ? 4 : 2; if ('letterSpacing' in ctx) ctx.letterSpacing = (sp * s / 28) + 'px'; }
-    ctx.fillText(text, x, y); ctx.restore();
-    return s;
-  }
+
+  /* ---------- 인스타 · PNG: 재료 질감 위 2D 음각 합성 ---------- */
   function frame(ctx, W, H) {
     ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, W, H);
-    rr(ctx, 40, 40, W - 80, H - 80, 24); ctx.lineWidth = 4; ctx.strokeStyle = COL.gold; ctx.stroke();
+    E.rrPath(ctx, 40, 40, W - 80, H - 80, 24); ctx.lineWidth = 4; ctx.strokeStyle = COL.gold; ctx.stroke();
   }
-  function text(ctx, t, x, y, font, color, align, base) {
-    ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align || 'center'; ctx.textBaseline = base || 'alphabetic'; ctx.fillText(t, x, y);
+  function slab(ctx, mat, tex, x, y, w, h, r) {
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.18)'; ctx.shadowOffsetY = 12; ctx.shadowBlur = 24;
+    E.rrPath(ctx, x, y, w, h, r); ctx.fillStyle = E.MATS[mat].base; ctx.fill(); ctx.restore();
+    ctx.save(); E.rrPath(ctx, x, y, w, h, r); E.fillStone(ctx, mat, tex, 1, x, y); ctx.restore();
+    E.edgeShade(ctx, x, y, w, h, r, mat, 1);
   }
-  function rosetta(ctx, W, H, size, bottom, withUrl) {
-    var y = H - bottom;
-    ctx.fillStyle = COL.sand; ctx.fillRect(W / 2 - 100, y - size - 28, 200, 2);
-    text(ctx, '로제타석처럼, 한 이름을 세 문자로.', W / 2, y, '400 ' + size + 'px "Noto Sans KR"', COL.muted);
-    if (withUrl) text(ctx, SITE_URL.replace(/^https:\/\//, '').replace(/\/$/, ''), W / 2, y + 36, '400 18px "Noto Sans KR"', COL.muted);
+  function engraveOn(ctx, W, H, mat, big, small, clip) {
+    ctx.save(); if (clip) { clip(ctx); ctx.clip(); }
+    if (big.length) E.composite(ctx, E.renderMasks(big, W, H), mat, 2);
+    if (small.length) E.composite(ctx, E.renderMasks(small, W, H), mat, 1);
+    ctx.restore();
+  }
+  function T(str, fam, size, cx, cy, maxW, o) { return E.textUnits(str, fam, size, cx, cy, maxW, o); }
+  function rule(x, y, w, h) { return { layer: 'carve', bbox: [x, y, w, h], draw: function (c) { c.fillRect(x, y, w, h); } }; }
+  function siteUrl() { return SITE_URL.replace(/^https:\/\//, '').replace(/\/$/, ''); }
+  function scriptOpts(k) { return { rtl: k === 'phoenician', spacing: k === 'ugaritic' ? 0.14 : k === 'runic' ? 0.07 : 0 }; }
+
+  // 주인공 단위 만들기. 반환 {units, h}
+  function heroUnits(k, res, cx, top, maxW, maxH, o) {
+    if (k === 'hiero') {
+      var probe = E.twoCartouches(state.title.hiero, res.hiero, { x: cx - maxW / 2, y: 0, w: maxW, h: maxH }, { labelSize: o.label, labels: LABELS, maxWc: o.cartW });
+      var hh = probe.height;
+      var t = E.twoCartouches(state.title.hiero, res.hiero, { x: cx - maxW / 2, y: top, w: maxW, h: hh }, { labelSize: o.label, labels: LABELS, maxWc: o.cartW });
+      return { units: t.units, h: hh };
+    }
+    var size = k === 'ugaritic' ? o.cune : o.size;
+    var u = T(res[k], E.FONT[k], size, cx, top + size * 0.65, maxW, scriptOpts(k));
+    return { units: u, h: size * 1.3 };
+  }
+  function oghamPillar(ctx, tex, cx, cy, len, size) {
+    var w = Math.max(size * 1.9, 150), h = len + size * 1.2, x = cx - w / 2, y = cy - h / 2;
+    slab(ctx, 'wood', tex, x, y, w, h, 6);
+    ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.16)'; ctx.fillRect(cx, y, w / 2, h); ctx.fillStyle = 'rgba(255,240,210,0.08)'; ctx.fillRect(x, y, w / 2, h); ctx.restore();
+    return { x: x, y: y, w: w, h: h };
   }
 
-  // 주인공 높이/그리기 (가로 문자 size, 쐐기 작게, 상형 카르투슈, 오검 세로)
-  function heroMeasure(k, res, o, maxW) {
-    if (k === 'hiero') return hieroSize(res.hiero, o.cartW, o.cartW * 72 / 260, maxW, o.oghamMax);
-    if (k === 'ogham') { var c = document.createElement('canvas').getContext('2d'); fit(c, res.ogham, fam('ogham'), o.size, o.oghamMax); return c.measureText(res.ogham).width; }
-    return (k === 'ugaritic' ? o.cune : o.size) * 1.3;
-  }
-  function heroDraw(ctx, k, res, o, cx, top, h, maxW) {
-    var cy = top + h / 2;
-    if (k === 'hiero') return drawCartouche(ctx, res.hiero, cx, cy, o.cartW, o.cartW * 72 / 260, maxW, o.oghamMax);
-    if (k === 'ogham') return drawOgham(ctx, res.ogham, cx, cy, o.size, o.oghamMax, true, 3);
-    drawScriptLine(ctx, k, res[k], cx, cy, k === 'ugaritic' ? o.cune : o.size, maxW);
-  }
-
-  function feedCard(res, k) {
-    var W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    var ctx = cv.getContext('2d'); frame(ctx, W, H);
-    var maxW = W - 192;
-    text(ctx, S[k].label, W / 2, 140, '600 32px "Noto Serif KR"', COL.goldDark, 'center', 'top');
-    var o = { size: 120, cune: 96, cartW: 260, oghamMax: 600 };
-    var hh = heroMeasure(k, res, o, maxW);
-    var cap = k === 'hiero' ? 20 + 24 : 0; // 카르투슈 아래 '탄생명 (nomen)'
-    var block = hh + cap + 64 + 56 + 16 + 36, top = (H - block) / 2;
-    heroDraw(ctx, k, res, o, W / 2, top, hh, maxW);
-    if (cap) text(ctx, NOMEN, W / 2, top + hh + 20, '400 24px "Noto Sans KR"', COL.muted, 'center', 'top');
-    var y = top + hh + cap + 64;
-    text(ctx, res.korean, W / 2, y, '500 56px "Noto Sans KR"', COL.text, 'center', 'top');
-    text(ctx, res.roman, W / 2, y + 56 + 16, '400 36px "Noto Serif"', COL.muted, 'center', 'top');
-    rosetta(ctx, W, H, 26, 110, true);
-    return cv;
-  }
-  function storyCard(res, k) {
-    var W = 1080, H = 1920, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    var ctx = cv.getContext('2d'); frame(ctx, W, H);
-    var maxW = W - 192, areaTop = 250, areaH = 1330;
-    var o = { size: 140, cune: 112, cartW: 300, oghamMax: 800 };
-    var cap = k === 'hiero' ? 24 + 28 : 0;
-    var fixed = 36 + 80 + cap + 80 + 64 + 48 + 40 + 48 + 28;
-    var hh = Math.min(heroMeasure(k, res, o, maxW), areaH - fixed);
-    o.oghamMax = Math.min(800, areaH - fixed);
-    var top = areaTop + (areaH - (fixed + hh)) / 2, y = top;
-    text(ctx, S[k].label, W / 2, y, '600 36px "Noto Serif KR"', COL.goldDark, 'center', 'top'); y += 36 + 80;
-    heroDraw(ctx, k, res, o, W / 2, y, hh, maxW); y += hh;
-    if (cap) { text(ctx, NOMEN, W / 2, y + 24, '400 28px "Noto Sans KR"', COL.muted, 'center', 'top'); y += cap; }
-    y += 80;
-    text(ctx, res.korean, W / 2, y, '500 64px "Noto Sans KR"', COL.text, 'center', 'top'); y += 64 + 48;
-    text(ctx, res.roman, W / 2, y, '400 40px "Noto Serif"', COL.muted, 'center', 'top'); y += 40 + 48;
-    text(ctx, '로제타석처럼, 한 이름을 세 문자로.', W / 2, y, '400 28px "Noto Sans KR"', COL.muted, 'center', 'top');
-    return cv;
-  }
-  function allCard(res, story) {
-    var W = 1080, H = story ? 1920 : 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    var ctx = cv.getContext('2d'); frame(ctx, W, H);
-    var rowH = story ? 150 : 120, size = story ? 56 : 48, x0 = 96, valX = x0 + 220, valW = W - 96 - valX;
-    var tableH = rowH * KEYS.length, headH = 64 + 16 + 32;
-    var top = story ? 250 + (1330 - (headH + 48 + tableH + 48 + 28)) / 2 : 120;
-    text(ctx, res.korean, W / 2, top, '500 64px "Noto Sans KR"', COL.text, 'center', 'top');
-    text(ctx, res.roman, W / 2, top + 64 + 16, '400 32px "Noto Serif"', COL.muted, 'center', 'top');
-    var ty = top + headH + 48;
-    KEYS.forEach(function (k, i) {
-      var cy = ty + i * rowH + rowH / 2;
-      if (i) { ctx.fillStyle = COL.cardBorder; ctx.fillRect(x0, ty + i * rowH, W - 192, 1); }
-      text(ctx, S[k].tab === '쐐기' ? '쐐기(우가리트)' : S[k].tab, x0, cy, '400 26px "Noto Sans KR"', COL.muted, 'left', 'middle');
-      if (k === 'ogham') {
-        var tmp = ctx; var s = fit(tmp, res.ogham, fam('ogham'), size, valW);
-        tmp.font = s + 'px ' + fam('ogham'); var w = tmp.measureText(res.ogham).width;
-        drawOgham(ctx, res.ogham, valX + w / 2, cy, s, valW, false, 1.5);
-      } else drawScriptLine(ctx, k, res[k], valX, cy, k === 'ugaritic' ? Math.round(size * 0.85) : size, valW, 'left');
+  function storyLayout(H) { return H === 1920; }
+  // 피드(1080×1350) / 스토리(1080×1920) 단일 문자 카드
+  function singleCard(res, k, story) {
+    var W = 1080, H = story ? 1920 : 1350, cv = E.mk(W, H), ctx = cv.getContext('2d'), mat = E.matFor(k, state.hieroMat);
+    return E.loadTex(mat).then(function (tex) {
+      frame(ctx, W, H);
+      var maxW = W - 192, big = [], small = [], ogham = k === 'ogham';
+      var o = story ? { size: 140, cune: 112, cartW: 300, oghamMax: 800, label: 22 } : { size: 120, cune: 96, cartW: 260, oghamMax: 600, label: 22 };
+      // (카르투슈 폭 260/300은 두 개 나란히 놓으므로 각 0.62배)
+      var lab = S[k].label, labS = story ? 36 : 32, korS = story ? 64 : 56, romS = story ? 40 : 36;
+      var heroMaxH = story ? 760 : 600, hero, heroH, y, top;
+      if (ogham) {
+        var probe = E.oghamUnits(res.ogham, 120, 0, 0, o.oghamMax); heroH = probe.len + 120 * 0.2;
+      } else { hero = heroUnits(k, res, W / 2, 0, maxW, heroMaxH, o); heroH = hero.h; }
+      if (story) {
+        var fixed = labS + 80 + 80 + korS + 48 + romS + 48 + 28;
+        top = 250 + (1330 - (fixed + heroH)) / 2; y = top;
+      } else { top = (H - (heroH + 64 + korS + 16 + romS)) / 2; }
+      var labY = story ? top + labS / 2 : 140 + labS / 2, heroTop = story ? top + labS + 80 : top;
+      var korY = heroTop + heroH + (story ? 80 : 64) + korS / 2, romY = korY + korS / 2 + (story ? 48 : 16) + romS / 2;
+      var rosY = story ? romY + romS / 2 + 48 + 14 : H - 110 - 13;
+      var texts = function (arr, sm) {
+        arr.push.apply(arr, T(lab, 'Noto Serif KR', labS, W / 2, labY, maxW, { weight: 600 }));
+        arr.push.apply(arr, T(res.korean, 'Noto Sans KR', korS, W / 2, korY, maxW, { weight: 500 }));
+        arr.push.apply(arr, T(res.roman, 'Noto Serif', romS, W / 2, romY, maxW));
+        sm.push.apply(sm, T('로제타석처럼, 한 이름을 세 문자로.', 'Noto Sans KR', story ? 28 : 26, W / 2, rosY, maxW));
+        if (!story) { sm.push(rule(W / 2 - 100, rosY - 13 - 28, 200, 2)); sm.push.apply(sm, T(siteUrl(), 'Noto Sans KR', 18, W / 2, rosY + 40, maxW)); }
+      };
+      if (ogham) {
+        // 오검: 판 바깥 파피루스 배경에 글, 가운데 세로 기둥에 음각
+        var lineTexts = [], lineSmall = []; texts(lineTexts, lineSmall);
+        ctx.fillStyle = COL.text; [lineTexts, lineSmall].forEach(function (arr, i) { arr.forEach(function (u) { ctx.fillStyle = i ? COL.muted : COL.text; u.draw(ctx); }); });
+        var cy = heroTop + heroH / 2, pu = E.oghamUnits(res.ogham, 120, W / 2, cy, o.oghamMax);
+        var p = oghamPillar(ctx, tex, W / 2, cy, pu.len, pu.size);
+        engraveOn(ctx, W, H, 'wood', pu, [], function (c) { E.rrPath(c, p.x, p.y, p.w, p.h, 6); });
+        return cv;
+      }
+      var r = E.slabRadius(mat, W - 144); if (mat === 'clay') r = 48;
+      slab(ctx, mat, tex, 72, 72, W - 144, H - 144, r);
+      texts(big, small);
+      hero = heroUnits(k, res, W / 2, heroTop, maxW, heroMaxH, o);
+      hero.units.forEach(function (u) { (u.bbox[3] < 40 ? small : big).push(u); });
+      engraveOn(ctx, W, H, mat, big, small, function (c) { E.rrPath(c, 72, 72, W - 144, H - 144, r); });
+      return cv;
     });
-    if (story) text(ctx, '로제타석처럼, 한 이름을 세 문자로.', W / 2, ty + tableH + 48, '400 28px "Noto Sans KR"', COL.muted, 'center', 'top');
-    else rosetta(ctx, W, H, 26, 110, true);
-    return cv;
   }
-
-  // PNG 저장 (1차 지침 1080×1350 카르투슈 포스터)
+  // '전체' 카드
+  function allCard(res, story) {
+    var W = 1080, H = story ? 1920 : 1350, cv = E.mk(W, H), ctx = cv.getContext('2d'), mat = 'limestone';
+    return E.loadTex(mat).then(function (tex) {
+      frame(ctx, W, H); slab(ctx, mat, tex, 72, 72, W - 144, H - 144, E.slabRadius(mat, W - 144));
+      var rowH = story ? 150 : 120, size = story ? 56 : 48, x0 = 112, valX = x0 + 220, valW = W - 112 - valX;
+      var tableH = rowH * KEYS.length, headH = 64 + 16 + 32;
+      var top = story ? 250 + (1330 - (headH + 48 + tableH + 48 + 28)) / 2 : 120;
+      var big = [], small = [];
+      big.push.apply(big, T(res.korean, 'Noto Sans KR', 64, W / 2, top + 32, W - 192, { weight: 500 }));
+      big.push.apply(big, T(res.roman, 'Noto Serif', 32, W / 2, top + 64 + 16 + 16, W - 192));
+      var ty = top + headH + 48;
+      KEYS.forEach(function (k, i) {
+        var cy = ty + i * rowH + rowH / 2;
+        if (i) small.push(rule(x0, ty + i * rowH, W - 224, 1));
+        small.push.apply(small, T(k === 'ugaritic' ? '쐐기(우가리트)' : S[k].tab, 'Noto Sans KR', 26, x0, cy, 210, { align: 'left' }));
+        var sz = k === 'ugaritic' ? Math.round(size * 0.85) : size, so = scriptOpts(k);
+        so.align = k === 'phoenician' ? 'right' : 'left';
+        big.push.apply(big, T(res[k], E.FONT[k], sz, k === 'phoenician' ? valX + valW : valX, cy, valW, so));
+      });
+      var ry = story ? ty + tableH + 48 + 14 : H - 110 - 13;
+      small.push.apply(small, T('로제타석처럼, 한 이름을 세 문자로.', 'Noto Sans KR', story ? 28 : 26, W / 2, ry, W - 192));
+      if (!story) { small.push(rule(W / 2 - 100, ry - 41, 200, 2)); small.push.apply(small, T(siteUrl(), 'Noto Sans KR', 18, W / 2, ry + 40, W - 192)); }
+      engraveOn(ctx, W, H, mat, big, small, function (c) { E.rrPath(c, 72, 72, W - 144, H - 144, E.slabRadius(mat, W - 144)); });
+      return cv;
+    });
+  }
+  // PNG 저장: 상형 포스터 (카르투슈 두 개 + 한글·로마자·그리스어)
   function posterCard(res) {
-    var W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    var ctx = cv.getContext('2d'); ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, W, H);
-    var g = geometry(glyphList(res.hiero).length), sc = Math.min(2.4, (W - 160) / g.w, 800 / g.h);
-    var ch = drawCartouche(ctx, res.hiero, W / 2, 80 + 400, 120 * sc, 36 * sc, W - 160, 800);
-    text(ctx, NOMEN, W / 2, 480 + ch / 2 + 28, '400 24px "Noto Sans KR"', COL.muted, 'center', 'top');
-    text(ctx, res.korean, W / 2, 1000, '500 40px "Noto Sans KR"', COL.text);
-    text(ctx, res.roman, W / 2, 1066, '400 32px "Noto Serif"', COL.text);
-    text(ctx, res.greek, W / 2, 1122, '400 32px "Noto Serif"', COL.text);
-    text(ctx, '로제타석처럼, 한 이름을 세 문자로.', W / 2, 1280, '400 24px "Noto Sans KR"', COL.muted);
-    return cv;
+    var W = 1080, H = 1350, cv = E.mk(W, H), ctx = cv.getContext('2d'), mat = state.hieroMat;
+    return E.loadTex(mat).then(function (tex) {
+      ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, W, H);
+      var r = E.slabRadius(mat, W - 144); slab(ctx, mat, tex, 72, 72, W - 144, H - 144, r);
+      var big = [], small = [];
+      var hero = heroUnits('hiero', res, W / 2, 130, W - 240, 780, { cartW: 200, label: 22 });
+      hero.units.forEach(function (u) { (u.bbox[3] < 40 ? small : big).push(u); });
+      var y = 130 + hero.h + 60;
+      big.push.apply(big, T(res.korean, 'Noto Sans KR', 40, W / 2, y, W - 240, { weight: 500 }));
+      big.push.apply(big, T(res.roman, 'Noto Serif', 32, W / 2, y + 62, W - 240));
+      big.push.apply(big, T(res.greek, 'Noto Serif', 32, W / 2, y + 114, W - 240));
+      small.push.apply(small, T('로제타석처럼, 한 이름을 세 문자로.', 'Noto Sans KR', 24, W / 2, H - 130, W - 240));
+      engraveOn(ctx, W, H, mat, big, small, function (c) { E.rrPath(c, 72, 72, W - 144, H - 144, r); });
+      return cv;
+    });
   }
 
   function download(cv, name) {
@@ -332,38 +353,69 @@
     }, 'image/png');
   }
   function fileBase() { return state.res.roman.replace(/\s+/g, '_'); }
+  function nextFrame() { return new Promise(function (r) { requestAnimationFrame(function () { setTimeout(r, 0); }); }); }
+  // 버튼은 누른 뒤에만 생성, 생성 중 '새기는 중…'
+  function busy(btn, job) {
+    if (btn.dataset.busy) return; var label = btn.textContent; btn.dataset.busy = '1'; btn.textContent = '새기는 중…'; btn.setAttribute('aria-busy', 'true');
+    return nextFrame().then(job).catch(function (e) { console.warn(e); toast('이미지를 만들지 못했어요'); }).then(function () {
+      btn.textContent = label; delete btn.dataset.busy; btn.removeAttribute('aria-busy');
+    });
+  }
+  function ensureFonts(res) {
+    var extra = document.fonts ? [document.fonts.load('600 32px "Noto Serif KR"', '문자'), document.fonts.load('500 22px "Noto Sans KR"', '즉위명 탄생명')] : [];
+    return Promise.all([loadAll(res), loadFont('hiero', state.title.hiero + E.TITLE_SIGN.prenomen + E.TITLE_SIGN.nomen)].concat(extra)).catch(function () {});
+  }
 
   var sheetCanvas = null, sheetName = '', lastFocus = null;
-  function openSheet(kind) {
+  function openSheet(kind, btn) {
     var res = state.res; if (!res) return;
-    loadAll(res).then(function () {
-      var k = state.tab;
-      sheetCanvas = k === 'all' ? allCard(res, kind === 'story') : (kind === 'story' ? storyCard(res, k) : feedCard(res, k));
-      sheetName = 'cartouche-' + kind + '-' + k + '-' + fileBase() + '.png';
-      $('sheet-img').src = sheetCanvas.toDataURL('image/png');
-      $('sheet-img').alt = (kind === 'story' ? '인스타 스토리' : '인스타 피드') + ' 카드 미리보기: ' + res.korean + ' (' + res.roman + ')';
-      lastFocus = document.activeElement; $('sheet').hidden = false; $('sheet-save').focus();
+    busy(btn, function () {
+      return ensureFonts(res).then(function () {
+        var k = state.tab, story = kind === 'story';
+        return k === 'all' ? allCard(res, story) : singleCard(res, k, story);
+      }).then(function (cv) {
+        sheetCanvas = cv; sheetName = 'carved-' + kind + '-' + state.tab + '-' + fileBase() + '.png';
+        $('sheet-img').src = cv.toDataURL('image/png');
+        $('sheet-img').alt = (kind === 'story' ? '인스타 스토리' : '인스타 피드') + ' 카드 미리보기: ' + res.korean + ' (' + res.roman + ')';
+        lastFocus = document.activeElement; $('sheet').hidden = false; $('sheet-save').focus();
+      });
     });
   }
   function closeSheet() { $('sheet').hidden = true; if (lastFocus) lastFocus.focus(); }
 
   /* ---------- 이벤트 ---------- */
   buildTabs();
-  $('form').addEventListener('submit', function (e) { e.preventDefault(); convertNow($('name').value); });
+  $('form').addEventListener('submit', function (e) { e.preventDefault(); convertNow($('name').value, { save: true, url: true, user: true }); });
   $('btn-copy').addEventListener('click', copyText);
   $('btn-png').addEventListener('click', function () {
-    if (!state.res) return; loadAll(state.res).then(function () { download(posterCard(state.res), 'cartouche-' + fileBase() + '.png'); });
+    var res = state.res; if (!res) return;
+    busy($('btn-png'), function () { return ensureFonts(res).then(function () { return posterCard(res); }).then(function (cv) { download(cv, 'carved-' + fileBase() + '.png'); }); });
   });
-  $('btn-feed').addEventListener('click', function () { openSheet('feed'); });
-  $('btn-story').addEventListener('click', function () { openSheet('story'); });
+  $('btn-feed').addEventListener('click', function () { openSheet('feed', $('btn-feed')); });
+  $('btn-story').addEventListener('click', function () { openSheet('story', $('btn-story')); });
   $('sheet-save').addEventListener('click', function () { if (sheetCanvas) download(sheetCanvas, sheetName); });
   $('sheet').addEventListener('click', function (e) { if (e.target.hasAttribute('data-close')) closeSheet(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
+  $('btn-reroll').addEventListener('click', function () {
+    state.title = C.randomTitle(null, state.title && state.title.ko); render(); updateStage(true);
+  });
+  $('mat-toggle').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-mat]'); if (!b) return; state.hieroMat = b.dataset.mat; lsSet(MAT_KEY, state.hieroMat); render(); updateStage(true);
+  });
+  $('stage-preview-btn').addEventListener('click', function () { if (state.res && state.res.syllables.length) activateStage().then(function () { updateStage(true); }); });
+  // 2D 대체 화면: 무대 크기가 실제로 바뀔 때만(150ms 묶음) 다시 그림
+  var lastSize = '', rzTimer;
+  if (window.ResizeObserver) new ResizeObserver(function () {
+    clearTimeout(rzTimer); rzTimer = setTimeout(function () {
+      var st = $('stage'), k = st.clientWidth + 'x' + st.clientHeight;
+      if (k !== lastSize && state.stage === '2d') { lastSize = k; updateStage(false); }
+    }, 150);
+  }).observe($('stage'));
 
   render();
   // 첫 이름 우선순위: ?n= > 저장된 이름 > 홍길동
-  var q = null; try { q = new URL(location.href).searchParams.get('n'); } catch (e) {}
+  var q = qs.get('n');
   if (q && q.trim()) { $('name').value = q; convertNow(q, { save: true, url: false }); }
   else { var first = loadSaved() || DEFAULT_NAME; $('name').value = first; convertNow(first, { save: false, url: false }); }
-  window.__cartouche = { geometry: geometry, state: state, feedCard: feedCard, storyCard: storyCard, allCard: allCard, posterCard: posterCard, loadAll: loadAll, selectTab: selectTab };
+  window.__cartouche = { state: state, singleCard: singleCard, allCard: allCard, posterCard: posterCard, ensureFonts: ensureFonts, loadAll: loadAll, selectTab: selectTab, updateStage: updateStage, activateStage: activateStage };
 })();

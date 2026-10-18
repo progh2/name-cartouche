@@ -80,29 +80,30 @@
   }
   function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 
-  function syllableParts(d) {
+  function syllableParts(d, opts) {
     var gv = VOW_G[d.rJung];
+    var hv = (opts && opts.dropEu && d.rJung === 'eu') ? '' : VOW_H[d.rJung]; // 칭호: 받침용 'ㅡ'는 상형에서 생략
     return {
       roman: d.rCho + d.rJung + d.rJong,
       greekParts: [CONS_G[d.rCho], gv, FINAL_G[d.rJong]],
-      hiero: CONS_H[d.rCho] + VOW_H[d.rJung] + CONS_H[d.rJong]
+      hiero: CONS_H[d.rCho] + hv + CONS_H[d.rJong]
     };
   }
 
   // 입력을 단어(성/이름)로 나눔. 공백이 있으면 그대로, 없으면 첫 음절=성.
-  function splitName(input) {
+  function splitName(input, opts) {
     var clean = String(input || '').trim();
     var ignored = [];
     var words = clean.split(/\s+/).map(function (w) {
       return Array.from(w).filter(function (c) { if (isHangul(c)) return true; ignored.push(c); return false; }).join('');
     }).filter(Boolean);
     var userSpace = words.length > 1;
-    if (words.length === 1 && words[0].length > 1) words = [words[0].charAt(0), words[0].slice(1)];
+    if (!(opts && opts.noSplit) && words.length === 1 && words[0].length > 1) words = [words[0].charAt(0), words[0].slice(1)];
     return { words: words, ignored: ignored, korean: words.join(userSpace ? ' ' : '') };
   }
 
-  function convert(input) {
-    var sp = splitName(input);
+  function convert(input, opts) {
+    var sp = splitName(input, opts);
     var rows = [];
     var romanWords = [], greekWords = [], hieroWords = [];
     var ext = { runic: [], phoenician: [], ugaritic: [], ogham: [] };
@@ -110,7 +111,7 @@
       var syls = Array.from(w).map(decompose);
       var r = '', g = '', h = '', x = { runic: '', phoenician: '', ugaritic: '', ogham: '' };
       syls.forEach(function (d, si) {
-        var p = syllableParts(d);
+        var p = syllableParts(d, opts);
         var gp = p.greekParts.slice();
         if (syls.length > 1 && si === syls.length - 1) gp[1] = accentLastVowel(gp[1]); // 마지막 음절 강세
         var gs = gp.join('');
@@ -133,5 +134,27 @@
     return out;
   }
 
-  return { SCRIPT_KEYS: ['roman','greek','hiero','runic','phoenician','ugaritic','ogham'], decompose: decompose, convert: convert, splitName: splitName, isHangul: isHangul };
+  /* 즉위명 칭호: 실제 즉위명에 쓰인 요소(…+마아트/케페르/카/헤테프+레=라)를 조합한 재미용 칭호 */
+  var TITLE_A = [
+    { ko: '우세르', la: 'User', t: '라의 {B} 강하다' }, { ko: '네브', la: 'Neb', t: '{B}의 주인, 라' }, { ko: '멘', la: 'Men', t: '라의 {B} 굳건하다' },
+    { ko: '네페르', la: 'Nefer', t: '라의 {B} 아름답다' }, { ko: '아아', la: 'Aa', t: '라의 {B} 위대하다' }, { ko: '세켐', la: 'Sekhem', t: '라의 {B} 힘세다' }];
+  var TITLE_B = [{ ko: '마아트', la: 'maat', m: '진리' }, { ko: '케페르', la: 'kheper', m: '나타남' }, { ko: '카', la: 'ka', m: '영혼' }, { ko: '헤테프', la: 'hetep', m: '평안' }];
+  function josaEun(w) { var c = w.charCodeAt(w.length - 1) - 0xAC00; return w + (c >= 0 && c % 28 ? '은' : '는'); }
+  function makeTitle(ai, bi) {
+    var A = TITLE_A[ai % TITLE_A.length], B = TITLE_B[bi % TITLE_B.length];
+    var ko = A.ko + B.ko + '레';
+    var meaning = A.t.indexOf('{B}의') >= 0 ? A.t.replace('{B}', B.m) : A.t.replace('{B}', josaEun(B.m));
+    var c = convert(ko, { noSplit: true, dropEu: true });
+    return { ko: ko, meaning: meaning, roman: A.la + B.la + 're', hiero: c.hiero, a: ai % TITLE_A.length, b: bi % TITLE_B.length };
+  }
+  function randomTitle(rand, avoid) {
+    rand = rand || Math.random;
+    for (var tries = 0; tries < 8; tries++) {
+      var t = makeTitle(Math.floor(rand() * TITLE_A.length), Math.floor(rand() * TITLE_B.length));
+      if (!avoid || t.ko !== avoid) return t;
+    }
+    return t;
+  }
+
+  return { makeTitle: makeTitle, randomTitle: randomTitle, TITLE_COUNT: TITLE_A.length * TITLE_B.length, SCRIPT_KEYS: ['roman','greek','hiero','runic','phoenician','ugaritic','ogham'], decompose: decompose, convert: convert, splitName: splitName, isHangul: isHangul };
 });

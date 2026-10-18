@@ -3,19 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>이름 카르투슈 · 한글 이름을 세 문자로</title>
-<meta name="description" content="한글 이름을 로마자 · 그리스어 · 이집트 상형문자 카르투슈로 음역합니다.">
+<title>돌에 새긴 이름 · Carved in Stone</title>
+<meta name="description" content="한글 이름을 이집트 상형문자 카르투슈·룬·쐐기·오검 등 일곱 문자로 돌에 새겨 보세요. 예: 홍길동 → Hong Gildong">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="돌에 새긴 이름">
+<meta property="og:title" content="돌에 새긴 이름 · Carved in Stone">
+<meta property="og:description" content="한글 이름을 카르투슈·룬·쐐기·오검으로 새겨요. 예: 홍길동 → 𓉔𓅱𓈖𓎼 𓎼𓇋𓂋𓂧𓅱𓈖𓎼">
+<meta property="og:url" content="https://progh2.github.io/name-cartouche/">
+<meta property="og:image" content="https://progh2.github.io/name-cartouche/assets/og.jpg">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Egyptian+Hieroglyphs&family=Noto+Sans+Runic&family=Noto+Sans+Phoenician&family=Noto+Sans+Ugaritic&family=Noto+Sans+Ogham&family=Noto+Sans+KR:wght@400;500&family=Noto+Serif+KR:wght@600&family=Noto+Serif:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500&family=Noto+Sans+Egyptian+Hieroglyphs&family=Noto+Sans+Runic&family=Noto+Sans+Phoenician&family=Noto+Sans+Ugaritic&family=Noto+Sans+Ogham&family=Noto+Sans+KR:wght@400;500&family=Noto+Serif+KR:wght@600&family=Noto+Serif:wght@400;500&display=swap" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect x=%229%22 y=%222%22 width=%2214%22 height=%2224%22 rx=%227%22 fill=%22%23FBF5E6%22 stroke=%22%239C7A1A%22 stroke-width=%222%22/%3E%3Cpath d=%22M6 29h20%22 stroke=%22%239C7A1A%22 stroke-width=%222%22/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <main class="wrap">
   <header class="head">
-    <h1>이름 카르투슈</h1>
-    <p class="sub">한글 이름을 로마자 · 그리스어 · 이집트 상형문자로</p>
+    <h1>돌에 새긴 이름</h1>
+    <p class="en" lang="en">Carved in Stone</p>
+    <p class="sub">한글 이름을 상형문자 카르투슈·룬·쐐기·오검 등 일곱 문자로</p>
   </header>
 
   <form id="form" class="form" autocomplete="off">
@@ -28,6 +37,37 @@
   <nav class="tabs-wrap" aria-label="문자 선택">
     <div id="tabs" class="tabs" role="tablist"></div>
   </nav>
+
+  <section id="stage" class="stage" data-mode="preview" role="img" aria-label="빈 석회암 비석 미리보기. 변환하면 이름을 새겨요">
+    <img id="stage-preview" class="stage-preview" src="assets/stage-preview.webp" alt="" width="780" height="640" decoding="async">
+    <button type="button" id="stage-preview-btn" class="stage-hit" aria-label="돌에 새기기"></button>
+    <p id="stage-hint" class="stage-hint">‘변환’을 누르면 돌에 새겨요</p>
+    <canvas id="stage-2d" class="stage-canvas" hidden></canvas>
+    <div id="stage-3d" class="stage-3d" hidden></div>
+    <div id="stage-labels" class="stage-labels" aria-hidden="true"><span>즉위명 · 칭호</span><span>탄생명 · 내 이름</span></div>
+    <div class="vignette" aria-hidden="true"></div>
+  </section>
+
+  <div id="hiero-extra" class="hiero-extra" hidden>
+    <div class="title-row">
+      <p>즉위명 칭호 <b id="title-ko"></b> <span id="title-mean" class="title-mean"></span></p>
+      <button type="button" id="btn-reroll" class="text-btn">다시 뽑기</button>
+    </div>
+    <div id="mat-toggle" class="mat-toggle" role="radiogroup" aria-label="상형 재질">
+      <span class="mat-label">재질</span>
+      <button type="button" role="radio" data-mat="limestone" aria-checked="true">석회암</button>
+      <button type="button" role="radio" data-mat="papyrus" aria-checked="false">파피루스</button>
+    </div>
+  </div>
+
+  <details id="info" class="info2">
+    <summary>카르투슈는 왜 두 개일까?</summary>
+    <div class="info-body">
+      <p>파라오는 이름이 다섯 개였는데, 그중 두 개만 카르투슈에 넣었어요. 태어날 때 받은 <b>탄생명</b>(nomen)과 왕위에 오르며 새로 정한 <b>즉위명</b>(prenomen)이에요.</p>
+      <p>예: 람세스 2세 — 우세르마아트레(즉위명) / 람세스(탄생명)</p>
+      <p>여기선 탄생명에 내 이름을, 즉위명에 랜덤 칭호를 새겨요. 칭호는 실제 즉위명에 쓰인 말(우세르·마아트·레 등)을 조합한 재미용이에요.</p>
+    </div>
+  </details>
 
   <section id="cards" class="cards" aria-live="polite"></section>
 
@@ -47,14 +87,6 @@
     </table>
   </section>
 
-  <aside class="info" aria-labelledby="info-title">
-    <h2 id="info-title" class="info-title">파라오의 카르투슈</h2>
-    <p>파라오는 이름을 다섯 개 가졌는데, 그중 두 개만 카르투슈에 넣어 썼어요.
-      <b>즉위명</b>(왕명, prenomen)은 왕위에 오를 때 새로 정한 이름이고, <b>탄생명</b>(본명, nomen)은 태어나면서 받은 이름이에요.</p>
-    <p>예: 람세스 2세 — 우세르마아트레(즉위명) / 람세스(탄생명)</p>
-    <p>여기 카르투슈는 내 본래 이름을 옮긴 것이라 <b>탄생명</b>에 해당해요.</p>
-  </aside>
-
   <p class="notice">※ 번역이 아니라 <strong>소리 옮김(음역)</strong>이에요. 이름의 뜻이 아니라 발음을 각 문자로 옮겼고, 고대 이집트어·현대 그리스어의 정식 표기와는 다를 수 있어요.</p>
 </main>
 
@@ -73,6 +105,7 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script src="convert.js"></script>
+<script src="engrave.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
