@@ -2,6 +2,9 @@
   'use strict';
   var C = window.NameConvert;
   var SITE_URL = 'https://progh2.github.io/name-cartouche/';
+  var DEFAULT_NAME = '홍길동', STORE_KEY = 'name-cartouche:last';
+  function loadSaved() { try { return localStorage.getItem(STORE_KEY) || ''; } catch (e) { return ''; } }
+  function saveName(n) { try { localStorage.setItem(STORE_KEY, n); } catch (e) {} }
   var COL = { bg: '#F2E6C9', card: '#FBF5E6', cardBorder: '#E3D3AE', sand: '#D9C49A', gold: '#C9A227',
     goldDark: '#9C7A1A', text: '#3B2F1E', muted: '#7A6A4F' };
   var KEYS = C.SCRIPT_KEYS;
@@ -140,9 +143,12 @@
     else w.hidden = true;
   }
 
-  function convertNow(name) {
+  // opts.save: 마지막 이름 저장, opts.url: 주소에 ?n= 반영
+  function convertNow(name, opts) {
+    opts = opts || { save: true, url: true };
     state.res = C.convert(name);
-    try {
+    if (opts.save && state.res.syllables.length) saveName(name.trim());
+    if (opts.url) try {
       var u = new URL(location.href);
       if (state.res.syllables.length) u.searchParams.set('n', name.trim()); else u.searchParams.delete('n');
       history.replaceState(null, '', u);
@@ -347,7 +353,9 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
 
   render();
+  // 첫 이름 우선순위: ?n= > 저장된 이름 > 홍길동
   var q = null; try { q = new URL(location.href).searchParams.get('n'); } catch (e) {}
-  if (q) { $('name').value = q; convertNow(q); }
+  if (q && q.trim()) { $('name').value = q; convertNow(q, { save: true, url: false }); }
+  else { var first = loadSaved() || DEFAULT_NAME; $('name').value = first; convertNow(first, { save: false, url: false }); }
   window.__cartouche = { geometry: geometry, state: state, feedCard: feedCard, storyCard: storyCard, allCard: allCard, posterCard: posterCard, loadAll: loadAll, selectTab: selectTab };
 })();

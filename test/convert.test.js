@@ -27,3 +27,8 @@ assert.strictEqual(h2.ugaritic, '𐎅𐎀𐎎𐎟𐎂𐎛𐎅𐎜𐎐');
 assert.strictEqual(h2.korean, '함기훈');
 assert.strictEqual(convert('남궁 민수').korean, '남궁 민수');
 console.log('OK: script assertions passed');
+const hg = convert('홍길동');
+console.log('홍길동 →', require('../convert.js').SCRIPT_KEYS.map(k => `${k}: ${hg[k]}`).join(' | '));
+assert.strictEqual(hg.roman, 'Hong Gildong');
+assert.strictEqual(hg.korean, '홍길동');
+console.log('OK: 홍길동 passed');
